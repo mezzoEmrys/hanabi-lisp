@@ -1,0 +1,31 @@
+
+players identified by play order, player who plays first is 0
+
+server to client actions:
+(player) discard (slot) (suit) (rank) [draw (suit) (rank)]
+(player) play (slot) (suit) (rank) [draw (suit) (rank)]
+(player) clue (player) (type) (clue) (slots)
+
+client to server actions:
+discard (slot)
+play (slot)
+clue (player) (type) (clue)
+
+starting input
+id cards clues strikes num-players
+
+start 0 50 8 0 4
+red yellow green blue white multi
+0 unknown unknown unknown unknown unknown unknown unknown unknown
+1 red 2 yellow 2 white 2 green 2
+2 red 3 yellow 3 white 3 green 3
+3 red 4 yellow 4 white 4 green 4
+
+turn input
+
+cards clues strikes current-playing 
+turn 50 8 0 0 [action]
+
+Figure out whether bot should keep track of cards in deck / clues / strikes
+
+; intern [suit] and [type]
