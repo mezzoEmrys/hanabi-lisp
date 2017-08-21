@@ -55,7 +55,7 @@
     (let* ((player-hands (generate-player-hands)) 
            (card (car (nth 1 player-hands))))
       (set-card card 'red 1)
-      (clue-card card 'rank 1 'positive)
+      (clue-card card 1 'positive)
       (is-safe-discard (new-known-card 'red 1)))
 
     "safe discards should not be clued"
@@ -67,8 +67,8 @@
                     for card in hand
                     do (progn 
                          (setf (rank-value card) 1)
-                         (setf (suit-value card) suit)
-                         (clue-information (suit-information card) 'positive suit))))
+                         (setf (suit-value card) suit))))
+      (mapcar (lambda (card) (clue-card card 1)) (nth 1 player-hands))
       (setf (nth 0 player-hands) (make-hand))
       (action-eq (discard-action (chop-index (nth 0 player-hands)))
                  (determine-action (nth 0 player-hands))))
@@ -77,7 +77,7 @@
     (let ((recieved-clue-last-turn nil)
           (hand (make-hand))
           (clues 0))
-      (clue-card (chop-card-of hand) 'suit 'red 'positive)
+      (clue-card (chop-card-of hand) 'red 'positive)
       (action-eq (discard-action (chop-index hand)) 
                  (determine-action hand))))
 
@@ -119,48 +119,105 @@
   "#4 - Minimum Clue Value Principle"
   (test-group
     "indicate sufficient information for one or more previous unclued cards to be played"
-    (let ((clues 8)))
+    (let ((clues 8)
+          (player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((blue 1) (yellow 1) (red 3) (blue 5))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          action)
+      (setf action (determine-action))
+      (setf (target action) 0)
+      (setf (slots action) (slots-value-matches (nth 1 player-hands) (data action)))
+      (setf (nth 1 player-hands) (player-hand-from '((red 1) (red 2) (red 3) (red 5))))
+      (interpret action)
+      (some #'play-clued (my-hand)))
+
 
     "must prevent possible discard of a card (such as in save principle)"
-    (let ((a nil))))
+    (let ((clues 8)
+          (player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          action)
+      (setf action (determine-action))
+      (setf (target action) 0)
+      (setf (slots action) (slots-value-matches (nth 1 player-hands) (data action)))
+      (setf (nth 1 player-hands) (player-hand-from'((yellow 1) (yellow 2) (yellow 3) (yellow 5))))
+      (interpret action)
+      (some #'save-clued (my-hand))))
 
   "#5 - Play Order Principle"
   (test-group
     "when a play clue touches multiple cards, if it touches the chop, it's focused on the chop"
-    (let ((a nil)))
+    (let ((player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (action (make-instance 'hana-action :sender 3 :type 'clue :target 0 :data 'blue :slots '(0 1 3))))
+      (interpret action)
+      (play-clued (chop-card-of (my-hand))))
 
     "otherwise, it's focused on the newest card"
-    (let ((a nil))))
+    (let ((player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (action (make-instance 'hana-action :sender 3 :type 'clue :target 0 :data 'blue :slots '(0 1 2))))
+      (interpret action)
+      (play-clued (first (my-hand)))))
 
   "#6 - Left-Most Playable Principle"
   (test-group
     "cards are expected to be played from left to right failing principle 5"
-    (let ((a nil))))
+    (let ((player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (action (make-instance 'hana-action :sender 3 :type 'clue :target 0 :data 'blue :slots '(0 1 2))))
+      (interpret action)
+      (play-clued (first (my-hand)))))
 
   "#7 - Information Lock Principle"
   (test-group
-    "clues should not override unless there is direct conflict"
-    (let ((a nil))))
+    "clue information is determined by what you know right now, and is only changed by direct conflict"
+    (let ((player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (action (make-instance 'hana-action :sender 3 :type 'clue :target 0 :data 'blue :slots '(0 1 2))))
+      (interpret action)
+      (play-clued (first (my-hand)))))
+  ; Right now the "implication" system isn't online, which is what would normally handle this (intermediate rules)
 
   "#8 - Good Lie Principle"
   (test-group
-    "you can be lied to, but the lie should be revealed soon"
-    (let ((a nil))))
+    "you can be lied to with implications, but the lie should be revealed the next turn"
+    (let ((default t))
+      default))
+  ; Right now the "implication" system isn't online, which is what would normally handle this (intermediate rules)
 
   "#9 - High Value Principle"
   (test-group
     "you should expect that what someone did is the highest value thing they could"
-    (let ((a nil)))))
+    (let ((default t))
+      default)))
+  ; Essentially, I should assume everyone else is following these rules - which I do. This sets up things for later.
 
 ;BEGINNER STRATEGIES
 (test-group
   "#1 - When to Discard"
   (test-group
     "avoid discarding if you can do anything else"
-    (let ((a nil)))
-
-    "early game, giving 2s and 5s clues off chop is okay to avoid first discard"
-    (let ((a nil))))
+    (let ((default t))
+      default))
+  ; You just gotta Believe because we don't have any way to test *everything*
 
   "#2 - Cluing 1s"
   (test-group
@@ -176,10 +233,25 @@
                  (determine-action (my-hand))))
 
     "assume all 1 clues in hand are playable"
-    (let ((a nil)))
+    (let ((player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (slots '(0 2 3)))
+      (interpret (make-instance 'hana-action :sender 3 :type 'clue :target 0 :data 1 :slots slots))
+      (every #'play-clued (mapcar (slot-to-card-for-hand (my-hand)) slots)))
 
     "at beginning of game play 1s from oldest to newest"
-    (let ((a nil))))
+    (let ((player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (slots '(0 2 3)))
+      (interpret (make-instance 'hana-action :sender 3 :type 'clue :target 0 :data 1 :slots slots))
+      (action-eq (play-action (car (last slots)))
+                 (determine-action (my-hand)))))
 
   "#3 - Saving 5s on Chop"
   (test-group
@@ -197,7 +269,15 @@
   "#4 - Saving 5s off Chop"
   (test-group
     "avoid doing this except when trying to avoid discards"
-    (let ((a nil))))
+    (let ((clues 8)
+          (player-hands (player-hands-from 
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 4) (red 2) (red 5) (red 3))
+                            ((yellow 2) (yellow 2) (red 2) (blue 2))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (recieved-clue-last-turn nil))
+      (not (action-eq (clue-action 1 5)
+                      (determine-action (my-hand))))))
 
   "#5 - Saving 2s on Chop"
   (test-group
@@ -214,5 +294,16 @@
 
   "#6 - Delayed Play Clues"
   (test-group
-    "if you recieve a save clue, it should be a play clue that should wait until it is possible."
-    (let ((a nil)))))
+    "if it's not a save clue, it may be a play clue contingent on other cards"
+    (let ((clues 8)
+          (player-hands (player-hands-from
+                          '(((unknown unknown) (unknown unknown) (unknown unknown) (unknown unknown))
+                            ((red 5) (red 2) (red 3) (purple 2))
+                            ((yellow 1) (yellow 1) (red 1) (blue 1))
+                            ((blue 2) (blue 3) (blue 3) (blue 4)))))
+          (recieved-clue-last-turn nil))
+      (interpret (make-instance 'hana-action :sender 1 :type 'clue :target 2 :data 1))
+      (interpret (make-instance 'hana-action :sender 3 :type 'clue :target 0 :data 2 :slots '(0)))
+      (every (lambda (card) (is-delayed-play-blocker card (nth 0 (my-hand)))) (nth 2 player-hands)))))
+
+;INTERMEDIATE STRATEGIES
